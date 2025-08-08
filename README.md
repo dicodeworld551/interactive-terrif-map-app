@@ -50,6 +50,10 @@ This app reflects this dynamic and evolving environment, offering context-rich, 
   2. Enable **GitHub Pages** under **Settings > Pages**, selecting the main branch and root folder
   3. Share the provided live URL
 
+## access
+
+**https://dicodeworld551.github.io/interactive-terrif-map-app/tariff_map_page.html**
+
 ---
 
 ## License
