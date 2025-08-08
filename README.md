@@ -36,7 +36,7 @@ This app reflects this dynamic and evolving environment, offering context-rich, 
 
 ## How to Use
 
-1. Open the live app URL (e.g., `https://yourusername.github.io/interactive-map-app/`)  
+1. Open the live app URL  **https://dicodeworld551.github.io/interactive-terrif-map-app/tariff_map_page.html** 
 2. Click on regions/countries/products to view detailed tariff explanations  
 3. Explore updated commentary and statistics by P Donald Trump
 
@@ -50,9 +50,7 @@ This app reflects this dynamic and evolving environment, offering context-rich, 
   2. Enable **GitHub Pages** under **Settings > Pages**, selecting the main branch and root folder
   3. Share the provided live URL
 
-## access
 
-**https://dicodeworld551.github.io/interactive-terrif-map-app/tariff_map_page.html**
 
 ---
 
