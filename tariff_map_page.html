@@ -1,0 +1,417 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Tariff Map — Updated Data (User-provided latest rates)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#f6f7fb;--card:#ffffff;--muted:#6b7280;--accent:#ffb300;--accent-2:#ff8f00}
+    html,body{height:100%;margin:0;padding:0;background:var(--bg);font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;color:#0b1020}
+    #map{height:100vh;width:100%;box-shadow:0 30px 60px rgba(11,16,32,0.12);border-radius:14px;overflow:hidden;margin:24px}
+
+    /* Premium Apple-like UI */
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.98), rgba(255,255,255,0.96));backdrop-filter: blur(8px);box-shadow:0 8px 30px rgba(11,16,32,0.08);border-radius:14px;padding:14px;transition:transform .22s ease, box-shadow .22s ease}
+    .card:hover{transform:translateY(-4px);box-shadow:0 18px 40px rgba(11,16,32,0.12)}
+
+    .info{padding:16px;border-radius:12px;min-width:260px}
+    .info h4{margin:0 0 6px 0;font-weight:800;font-size:14px}
+    .info .big{font-size:24px;font-weight:800;margin-top:6px}
+
+    .legend{padding:12px;border-radius:12px;min-width:260px}
+    .legend .gradient{height:18px;border-radius:9px;margin-bottom:10px;background:linear-gradient(90deg,#ffffe0,#ffd54f,#ffb300,#ff8f00)}
+    .legend .row{display:flex;justify-content:space-between;font-size:13px;color:var(--muted)}
+
+    .map-title{position:absolute;left:32px;top:24px;z-index:4500}
+    .map-title h1{margin:0;padding:12px 18px;font-size:20px;font-weight:800}
+    .map-title p{margin:0;padding:0 18px 12px 18px;font-size:13px;color:var(--muted);max-width:520px}
+
+    .search-box{display:flex;gap:8px;margin-top:10px}
+    .search-box input{flex:1;padding:10px 12px;border-radius:10px;border:1px solid rgba(11,16,32,0.06);background:transparent}
+    .search-box button{padding:10px 14px;border-radius:10px;border:none;background:var(--accent);color:#08101a;font-weight:700}
+
+    .sources{font-size:12px;color:var(--muted);margin-top:8px}
+
+    .leaflet-tooltip.my-tooltip{background:rgba(2,6,23,0.96);color:#fff;border-radius:10px;padding:12px;border:none;font-weight:600}
+
+    .loading{position:absolute;right:28px;top:28px;z-index:4600}
+
+    /* Deep dive panel (hidden by default) */
+    .deep-dive {
+      position: absolute;
+      right: 18px;
+      top: 80px;
+      z-index: 4700;
+      width: 360px;
+      max-width: calc(100% - 48px);
+      display: none; /* hidden by default */
+      padding: 16px;
+      box-sizing: border-box;
+      border-radius:12px;
+    }
+    .deep-dive.show { display: block; animation: pop .14s ease; }
+    @keyframes pop { from { transform: translateY(-6px) scale(.995); opacity:0 } to { transform: translateY(0) scale(1); opacity:1 } }
+    .deep-dive h3{margin:0 0 6px 0;font-size:16px}
+    .deep-dive .meta{font-size:13px;color:var(--muted);margin-bottom:10px}
+    .deep-dive .close-btn{position:absolute;right:8px;top:8px;border:none;background:transparent;font-weight:700;cursor:pointer;color:var(--muted)}
+    .deep-dive .key{font-weight:700}
+    .deep-dive .value{font-weight:800;font-size:20px;margin-top:4px}
+
+    .chip {
+      display:inline-block;padding:6px 10px;border-radius:999px;font-weight:700;font-size:12px;margin-right:8px;background:linear-gradient(90deg,var(--accent),var(--accent-2));color:#08101a;
+    }
+
+    .dd-row{display:flex;justify-content:space-between;align-items:center;margin:8px 0}
+    .dd-left{flex:1}
+    .dd-right{text-align:right;min-width:110px}
+
+    .timeline{margin-top:8px;padding-left:16px;color:var(--muted);font-size:13px}
+    .timeline li{margin-bottom:6px}
+
+    /* small visual separator */
+    .sep{height:1px;background:linear-gradient(90deg, rgba(11,16,32,0.03), rgba(11,16,32,0.06));margin:10px 0;border-radius:2px}
+
+    /* Leaflet control tweaks */
+    .leaflet-control-attribution{display:none}
+    .leaflet-control-zoom{box-shadow:0 6px 18px rgba(11,16,32,0.08);border-radius:10px}
+
+    @media (max-width:900px){
+      #map{margin:12px}
+      .map-title{left:12px;top:12px}
+      .deep-dive{right:12px;left:12px;width:auto;top:auto;bottom:18px}
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div class="map-title card" style="position:absolute;left:16px;top:12px">
+    <h1>Tariff Map — Latest (user-supplied rates)</h1>
+    <p>Map uses the exact rates you pasted. Hover a country to see its tariff rate (percent). USA is shown as 0% (target of tariffs).</p>
+    <div class="search-box">
+      <input id="searchInput" placeholder="Search country name (e.g. India)" />
+      <button id="searchBtn">Go</button>
+    </div>
+  </div>
+
+  <div class="loading card" id="loading" style="position:absolute;right:18px;top:18px;padding:10px;">Applying your data…</div>
+
+  <!-- Deep dive panel (hidden by default, shown when a country is clicked) -->
+  <div id="deepDive" class="card deep-dive" aria-hidden="true">
+    <button id="deepClose" class="close-btn" title="Close">✕</button>
+    <h3 id="deepTitle">Deep dive</h3>
+    <div id="deepMeta" class="meta">Click a country on the map to open a deep dive with details.</div>
+    <div id="deepContent">
+      <!-- populated dynamically -->
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.4.2/chroma.min.js"></script>
+  <script>
+  (async function(){
+    const map = L.map('map', {zoomControl:true, preferCanvas:true, worldCopyJump:false, minZoom:2, maxZoom:7, maxBounds: [[-90, -180],[90,180]] }).setView([20,0],2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19, attribution:'© OpenStreetMap contributors'}).addTo(map);
+
+    // User-provided tariff rates (normalized keys). These come directly from your message.
+    // Keys are normalized versions of country names (lowercase, no diacritics).
+    const tariffs = {
+      "mexico":25,
+      "china":30,
+      "canada":35,
+      "germany":15,
+      "japan":15,
+      "vietnam":20,
+      "south korea":15,
+      "korea republic of":15,
+      "taiwan":20,
+      "ireland":15,
+      "india":50,
+      "italy":15,
+      "united kingdom":10,
+      "switzerland":39,
+      "thailand":19,
+      "france":15,
+      "malaysia":19,
+      "singapore":10,
+      "brazil":50,
+      "netherlands":15,
+      "indonesia":19,
+      "belgium":15,
+      "israel":15,
+      "spain":15,
+      "sweden":15,
+      "colombia":10,
+      "austria":15,
+      "turkey":15,
+      "australia":10,
+      "chile":10,
+      "south africa":30,
+
+      "philippines":19,
+      "poland":15,
+      "saudi arabia":10,
+      "hungary":15,
+      "cambodia":19,
+      "costa rica":15,
+      "denmark":15,
+      "peru":10,
+      "ecuador":15,
+      "bangladesh":20,
+      "slovakia":15,
+      "finland":15,
+      "czech republic":15,
+      "iraq":35,
+      "dominican republic":10,
+      "united arab emirates":10,
+      "argentina":10,
+      "portugal":15,
+      "norway":15,
+      "slovenia":15,
+      "venezuela":15,
+      "nigeria":15,
+      "new zealand":15,
+      "honduras":10,
+      "guyana":15,
+      "pakistan":19,
+      "guatemala":10,
+      "nicaragua":18,
+      "romania":15
+      // Trinidad and Tobago had no rate in the pasted data — will use fallback
+    };
+
+    // load geo
+    const geoJsonUrl = 'https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson';
+    const geo = await (await fetch(geoJsonUrl)).json();
+
+    function normalizeName(s){
+      return s.toString().toLowerCase().replace(/\s+/g,' ').replace(/[\.,'`]/g,'').normalize('NFD').replace(/\p{Diacritic}/gu,'').trim();
+    }
+
+    // DEEP DATA: user-provided structured info for specific countries
+    const deepDataRaw = {
+      "China": {
+        tariffRate: "34%",
+        reasonCategory: "Reciprocity / trade-deficit adjustment",
+        timelineSummary: "Apr 2 2025 — EO Annex I assigned 34%"
+      },
+      "India": {
+        tariffRate: "26% → 50%",
+        reasonCategory: "Reciprocity + national-security penalty",
+        timelineSummary: "Apr 2025 — Annex I (26%); late Jul/early Aug penalty → 50%"
+      },
+      "Vietnam": {
+        tariffRate: "~46% initial → ~20% / 40% pen.",
+        reasonCategory: "Transshipment / reciprocity",
+        timelineSummary: "Apr 2025 — Annex; Jul 2 2025 deal reducing to ~20%, keeping 40% penalty"
+      },
+      "Bangladesh": {
+        tariffRate: "37% → reduced in some sectors",
+        reasonCategory: "Reciprocity / apparel sector negotiations",
+        timelineSummary: "Apr 2025 Annex; July/Aug sectoral reductions negotiated"
+      },
+      "Cambodia": {
+        tariffRate: "Very high (~49%) → reduced",
+        reasonCategory: "Transshipment / reciprocity",
+        timelineSummary: "Apr 2025 Annex; Jul/Aug reductions after talks"
+      },
+      "Thailand": {
+        tariffRate: "Very high",
+        reasonCategory: "Transshipment / reciprocity",
+        timelineSummary: "Apr 2025 Annex; Jul/Aug reduced after talks"
+      },
+      "Switzerland": {
+        tariffRate: "~31% → ~39%",
+        reasonCategory: "Reciprocity / trade-surplus reliance",
+        timelineSummary: "Apr 2025 Annex; Aug reporting of higher effective rate"
+      },
+      "Canada": {
+        tariffRate: "25% → 35%",
+        reasonCategory: "Retaliation / non-reciprocity",
+        timelineSummary: "Apr 2025 Annex; Jul 31 2025 rate increased to 35%"
+      },
+      "Brazil": {
+        tariffRate: "50%",
+        reasonCategory: "Punitive / political leverage",
+        timelineSummary: "Jul 2025 Federal announcement of 50% punitive tariff"
+      },
+      "Laos": {
+        tariffRate: "~40–48%",
+        reasonCategory: "Human-rights / forced-labor pressure",
+        timelineSummary: "Apr 2025 Annex; continued in Aug enforcement context"
+      },
+      "Myanmar": {
+        tariffRate: "~44%",
+        reasonCategory: "Human-rights / forced-labor pressure",
+        timelineSummary: "Apr 2025 Annex; reinforced by Aug enforcement policies"
+      },
+      "Syria": {
+        tariffRate: "~41%",
+        reasonCategory: "Sanctions / human-rights concerns",
+        timelineSummary: "Apr 2025 Annex; consistent with longstanding sanctions"
+      }
+    };
+
+    // normalize keys into deepData for fast lookups
+    const deepData = {};
+    for (const k in deepDataRaw) {
+      deepData[normalizeName(k)] = deepDataRaw[k];
+    }
+
+    // Prepare values
+    const values = [];
+    geo.features.forEach(f=>{
+      const admin = f.properties.ADMIN || f.properties.NAME || f.properties.name || '';
+      const n = normalizeName(admin);
+      // try direct match
+      let v = tariffs[n];
+      // Ensure US is always 0% (explicit target) — robust checks for name & ISO
+      if(['usa','united states','united states of america'].includes(n) || (f.properties.ISO_A3||f.properties.iso_a3||'').toString().toUpperCase()==='USA'){ v = 0; }
+      // handle common alternate names
+      if(v === undefined){
+        const alternates = {
+          'russian federation':'russia',
+          'korea republic of':'south korea',
+          'korea democratic people\'s republic of':'north korea',
+          'united states of america':'usa',
+          'united states':'usa',
+          'united kingdom of great britain and northern ireland':'united kingdom',
+          'cote divoire':'ivory coast',
+          'bolivia (plurinational state of)':'bolivia'
+        };
+        for(const a in alternates){
+          if(n.includes(a) && tariffs[alternates[a]]!==undefined){ v = tariffs[alternates[a]]; break; }
+        }
+      }
+      // some manual fixes for names that differ in data source
+      if(n === 'switzerland') v = tariffs['switzerland'] || v;
+      // USA target - show 0
+      if((f.properties.ISO_A3||f.properties.iso_a3||'').toString().toUpperCase()==='USA') v = 0;
+      if(v === undefined || v === null || isNaN(v)) v = 10; // fallback
+      f.properties._tariff = parseFloat(v);
+      values.push(f.properties._tariff);
+    });
+
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const colorScale = chroma.scale(['#ffffe0','#ffd54f','#ffb300','#ff8f00']).domain([min,max]);
+
+    function style(feature){
+      const v = feature.properties._tariff;
+      return {fillColor: colorScale(v).hex(), weight: 1, color: '#0b1020', fillOpacity: 0.94}
+    }
+
+    const info = L.control({position:'topright'});
+    info.onAdd = function(){ this._div = L.DomUtil.create('div','card info'); this.update(); return this._div; };
+    info.update = function(props){ if(props){ const name = props.ADMIN || props.NAME || props.name || 'Unknown'; const iso = (props.ISO_A3||props.iso_a3||'').toString().toUpperCase(); this._div.innerHTML = `<h4>Tariff</h4><strong>${name} ${iso}</strong><br/><div style="margin-top:6px;font-size:20px;font-weight:800">${props._tariff}%</div>`;} else { this._div.innerHTML = '<h4>Tariff</h4>Hover a country to see the rate you supplied.'; } };
+    info.addTo(map);
+
+    const legend = L.control({position:'bottomleft'});
+    legend.onAdd = function(){ const div = L.DomUtil.create('div','card legend'); let html = '<div class="gradient"></div>'; html += '<div class="row"><span>Low</span><span>High</span></div>'; html += `<div class="sources" style="margin-top:8px">Source: User-supplied latest dataset.</div>`; div.innerHTML = html; return div; };
+    legend.addTo(map);
+
+    // deep dive elements
+    const deepDiveEl = document.getElementById('deepDive');
+    const deepTitle = document.getElementById('deepTitle');
+    const deepMeta = document.getElementById('deepMeta');
+    const deepContent = document.getElementById('deepContent');
+    const deepClose = document.getElementById('deepClose');
+
+    function showDeepDiveForFeature(feature){
+      const nameRaw = feature.properties.ADMIN || feature.properties.NAME || feature.properties.name || 'Unknown';
+      const nameNorm = normalizeName(nameRaw);
+      const iso = (feature.properties.ISO_A3||feature.properties.iso_a3||'').toString().toUpperCase();
+      const tariff = feature.properties._tariff;
+
+      // If we have richer data, render it; otherwise show fallback info
+      const rich = deepData[nameNorm];
+
+      deepTitle.textContent = `${nameRaw} (${iso}) — Deep dive`;
+      if(rich){
+        deepMeta.textContent = rich.reasonCategory || '—';
+        // Build a clean visual block
+        deepContent.innerHTML = `
+          <div class="dd-row">
+            <div class="dd-left">
+              <div class="chip">Priority</div>
+              <div style="margin-top:8px;font-size:13px;color:var(--muted)">Provided tariff (map):</div>
+              <div style="margin-top:6px;font-weight:800;font-size:20px">${tariff}%</div>
+            </div>
+            <div class="dd-right">
+              <div style="font-size:12px;color:var(--muted)">Reported</div>
+              <div style="font-weight:900;font-size:18px;margin-top:6px">${rich.tariffRate}</div>
+            </div>
+          </div>
+          <div class="sep"></div>
+          <div style="font-size:13px;font-weight:700;margin-top:8px">Timeline</div>
+          <ul class="timeline">
+            <li>${rich.timelineSummary}</li>
+          </ul>
+          <div style="margin-top:10px;font-size:13px;color:var(--muted)"><strong>Reason</strong></div>
+          <div style="margin-top:6px;font-size:13px">${rich.reasonCategory}</div>
+        `;
+      } else {
+        deepMeta.textContent = `Tariff (as provided): ${tariff}%`;
+        deepContent.innerHTML = `
+          <div style="margin-top:8px">
+            <div><span class="key">Tariff:</span> <span class="value">${tariff}%</span></div>
+            <div style="margin-top:10px;font-size:13px;color:var(--muted)"><strong>Notes</strong></div>
+            <ul style="margin:6px 0 0 16px;padding:0;color:var(--muted);font-size:13px">
+              <li>Detailed timeline not available for this country in the provided list.</li>
+              <li>Value came from user-supplied dataset (fallback used if missing).</li>
+            </ul>
+          </div>
+        `;
+      }
+
+      deepDiveEl.classList.add('show');
+      deepDiveEl.setAttribute('aria-hidden','false');
+    }
+
+    deepClose.addEventListener('click', function(e){
+      e.stopPropagation();
+      deepDiveEl.classList.remove('show');
+      deepDiveEl.setAttribute('aria-hidden','true');
+    });
+
+    let geoLayer = L.geoJson(geo,{ style, onEachFeature:function(feature,layer){
+      const name = feature.properties.ADMIN || feature.properties.NAME || feature.properties.name || 'Unknown';
+      const iso = (feature.properties.ISO_A3||feature.properties.iso_a3||'').toString().toUpperCase();
+      const tariff = feature.properties._tariff;
+      layer.bindTooltip(`<div style="font-weight:700">${name} (${iso})</div><div>Tariff: <strong>${tariff}%</strong></div>`, {className:'my-tooltip', sticky:true});
+      layer.on({
+        mouseover(e){
+          const l = e.target;
+          l.setStyle({weight:2,color:'#000',fillOpacity:1});
+          if(!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) l.bringToFront();
+          info.update(feature.properties);
+        },
+        mouseout(e){
+          geoLayer.resetStyle(e.target);
+          info.update();
+        },
+        click(e){
+          // Keep the existing behavior (fit bounds)
+          map.fitBounds(e.target.getBounds(), {maxZoom:6});
+          // Show deep dive panel and populate it
+          showDeepDiveForFeature(feature);
+        }
+      });
+    } }).addTo(map);
+
+    map.fitBounds(geoLayer.getBounds());
+
+    document.getElementById('loading').style.display = 'none';
+
+    // search
+    document.getElementById('searchBtn').onclick = function(){ const q = document.getElementById('searchInput').value.trim().toLowerCase(); if(!q) return; let found = null; geo.features.forEach(f=>{ const name = (f.properties.ADMIN || f.properties.NAME || f.properties.name || '').toString().toLowerCase(); if(name.includes(q) && !found) found = f; }); if(found){ const layer = L.geoJson(found); map.fitBounds(layer.getBounds(), {maxZoom:6}); // also show deep dive for match
+        showDeepDiveForFeature(found);
+      } else { alert('Country not found — try another name.'); } };
+
+    // expose data for debugging
+    window.__userTariffs = tariffs;
+    console.log('User-supplied tariff map loaded — min',min,'max',max);
+  })();
+  </script>
+</body>
+</html>
